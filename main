@@ -1,0 +1,277 @@
+import pygame, random, abc
+
+
+def cell_to_pixel(cell):
+    return cell * CELL_SIZE
+
+
+def is_collide(rect, list_obstacle):
+    temp = [rect.colliderect(x) for x in list_obstacle]
+    return any(temp)
+
+
+screen = pygame.display.set_mode((1280, 800))
+pygame.display.set_caption("Ocean")
+clock = pygame.time.Clock()
+FPS = 2
+CELL_SIZE = 50
+
+
+def no_scope(x, y):
+    temp = x < 0 or x > 1280 or y < 0 or y > 800
+    return temp
+
+
+class IMove(abc.ABC):
+    @abc.abstractmethod
+    def move(self, list_obj):
+        pass
+
+
+class IDraw(abc.ABC):
+    @abc.abstractmethod
+    def draw(self, scr):
+        pass
+
+
+class IDivision(abc.ABC):
+    @abc.abstractmethod
+    def division(self):
+        pass
+
+
+class IDie(abc.ABC):
+    @abc.abstractmethod
+    def is_die(self):
+        pass
+
+
+class Objects(IDraw, IDie):
+    def __init__(self, x, y, img, speed=0):
+        self.x = x
+        self.y = y
+        self.img = img
+        self.speed = speed
+
+    def get_rect(self):
+        return self.img.get_rect().move(cell_to_pixel(self.x), cell_to_pixel(self.y))
+
+    def draw(self, scr):
+        scr.blit(self.img, self.get_rect())
+
+    @abc.abstractmethod
+    def is_obstacle(self):
+        pass
+
+    def no_scope(self, x, y):
+        x = cell_to_pixel(x)
+        y = cell_to_pixel(y)
+        temp = x < 0 or x > 1250 or y < 0 or y > 750
+        return temp
+
+
+class MovebleObject(Objects, IMove):
+    def move(self, list_obj):
+        list_obstacle = [x.get_rect() for x in list_obj if x.is_obstacle()]
+
+        while True:
+            x = self.x
+            y = self.y
+            direction = random.randint(0, 3)
+            if direction == 0:
+                x -= 1
+            if direction == 1:
+                x += 1
+            if direction == 2:
+                y -= 1
+            if direction == 3:
+                y += 1
+
+            if not self.no_scope(x, y) \
+                    and not \
+                    is_collide(pygame.Rect(cell_to_pixel(x), cell_to_pixel(y), CELL_SIZE, CELL_SIZE), list_obstacle):
+                self.x = x
+                self.y = y
+                break
+
+
+class Stone(Objects):
+    img = pygame.image.load('img/stone.png')
+
+    def __init__(self, x, y):
+        super().__init__(x, y, Stone.img)
+
+    def is_obstacle(self):
+        return True
+
+    def is_die(self):
+        return False
+
+
+class Jelly(MovebleObject):
+    img = pygame.image.load('img/jelly.png')
+
+    def __init__(self, x, y):
+        super().__init__(x, y, Jelly.img, speed=5)
+
+    def is_obstacle(self):
+        return True
+
+    def is_die(self):
+        return False
+
+    def __str__(self):
+        return f'x = {self.x} y = {self.y}'
+
+
+class Plankton(MovebleObject, IDivision):
+    img = pygame.image.load('img/planktonnew.png')
+
+    def __init__(self, x, y):
+        super().__init__(x, y, Plankton.img, speed=5)
+        self.xp = 100
+        self.die = False
+
+    def division(self):
+        self.xp += 5
+        if self.xp == 200:
+            self.xp = 100
+            return Plankton(self.x, self.y)
+
+    def health(self):
+        return self.xp
+
+    def is_obstacle(self):
+        return False
+
+    def is_die(self):
+        return self.die
+
+    def __str__(self):
+        return f'x = {self.x} y = {self.y}'
+
+
+class Fish(MovebleObject):
+    img = pygame.image.load('img/fishnew.png')
+
+    def __init__(self, x, y):
+        super().__init__(x, y, Fish.img, speed=5)
+        self.hunger = 100
+        self.die = False
+
+    def find_plankton(self, list_planktons):
+        # rect_l = pygame.Rect(cell_to_pixel(self.x - 1), cell_to_pixel(self.y), CELL_SIZE, CELL_SIZE)
+        # rect_r = pygame.Rect(cell_to_pixel(self.x + 1), cell_to_pixel(self.y), CELL_SIZE, CELL_SIZE)
+        # rect_b = pygame.Rect(cell_to_pixel(self.x), cell_to_pixel(self.y - 1), CELL_SIZE, CELL_SIZE)
+        # rect_t = pygame.Rect(cell_to_pixel(self.x), cell_to_pixel(self.y + 1), CELL_SIZE, CELL_SIZE)
+        # plankton_rect = None
+
+        for p in list_planktons:
+            if p.x == self.x - 1 and p.y == self.y:
+                return p
+            if p.x == self.x + 1 and p.y == self.y:
+                return p
+            if p.x == self.x and p.y == self.y - 1:
+                return p
+            if p.x == self.x and p.y == self.y + 1:
+                return p
+
+        return None
+
+    def move(self, list_obj):
+        self.hunger -= 5
+        if self.hunger <= 0:
+            self.die = True
+        if self.hunger <= 50:
+            lst_plankton = [x for x in list_obj if isinstance(x, Plankton)]
+            pr = self.find_plankton(lst_plankton)
+            if pr is not None:
+                self.x = pr.x
+                self.y = pr.y
+                self.hunger = 100
+                pr.die = True
+                return
+
+        super().move(list_obj)
+
+    def is_obstacle(self):
+        return False
+
+    def is_die(self):
+        return self.die
+
+    # def hunting(self, lst):
+    #     self.hunger -= 50
+    #     if self.hunger <= 50:
+    #         pr = self.find_plankton(lst_plankton)
+    #         if pr is not None:
+
+    def __str__(self):
+        return f'Fish x - {self.x}, y - {self.y}'
+
+
+jelly = Jelly(20, 5)
+stone = Stone(18, 5)
+stone1 = Stone(22, 5)
+stone2 = Stone(20, 3)
+stone3 = Stone(20, 7)
+plankton = Plankton(16, 5)
+fish = Fish(14, 5)
+
+list_obj = [stone, stone1, stone2, stone3, jelly, plankton, fish]
+
+running = True
+background = pygame.image.load('img/background.png')
+
+pygame.font.init()
+my_font = pygame.font.SysFont('Comic Sans MS', 30)
+
+
+def move(lst_obj):
+    for i in lst_obj:
+        if isinstance(i, IMove):
+            i.move(lst_obj)
+
+
+def draw(scr, lst_obj):
+    for i in lst_obj:
+        if isinstance(i, IDraw):
+            i.draw(scr)
+
+
+def division(lst_obj):
+    for i in lst_obj:
+        if isinstance(i, IDivision):
+            temp = i.division()
+            if temp is not None:
+                list_obj.append(temp)
+
+
+def carbage_collector(lst_obj):
+    temp = [x for x in lst_obj if x.is_die()]
+    for x in temp:
+        lst_obj.remove(x)
+
+
+while running:
+    text_surface = my_font.render(f'Жизнь планктона {plankton.health()}', False, (0, 0, 0))
+    text_surface_fish = my_font.render(f'Голод рыбы {fish.hunger}', False, (0, 0, 0))
+    screen.blit(background, (0, 0))
+    screen.blit(text_surface, (0, 0))
+    screen.blit(text_surface_fish, (0, 50))
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    move(list_obj)
+    division(list_obj)
+    draw(screen, list_obj)
+    carbage_collector(list_obj)
+
+    clock.tick(FPS)
+    pygame.display.update()
+
+
+#TODO объект океан выделить
+
